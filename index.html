@@ -52,6 +52,7 @@
       border: none; cursor: pointer; transition: transform 0.2s;
     }
     .btn:hover { transform: translateY(-2px); }
+    .btn:active { transform: translateY(0); }
     .btn-power {
       background: linear-gradient(135deg, #e94560, #c23152);
       width: 100%; padding: 18px; font-size: 20px; font-weight: bold;
@@ -66,11 +67,23 @@
     .metrics div { margin: 8px 0; display: flex; justify-content: space-between; }
     .metrics .label { color: #aaa; }
     .metrics .value { color: #fff; font-weight: bold; }
+    .metrics .value.active { color: #28a745; }
     .error {
       background: rgba(220,53,69,0.2); border: 1px solid #dc3545;
       padding: 10px; border-radius: 8px; margin-bottom: 15px;
       color: #ff6b7a; font-size: 14px; display: none;
     }
+    .intensity-indicator {
+      display: flex;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 15px;
+    }
+    .intensity-dot {
+      width: 20px; height: 20px; border-radius: 50%;
+      background: #555; transition: background 0.3s;
+    }
+    .intensity-dot.active { background: #fd7e14; }
   </style>
 </head>
 <body>
@@ -123,7 +136,12 @@
       <h3>⚡ Интенсивность</h3>
       <button class="btn btn-on" onclick="sendCommand('intensity_up')">+ Увеличить</button>
       <button class="btn btn-off" onclick="sendCommand('intensity_down')">- Уменьшить</button>
-      <div style="margin-top: 10px; color: #aaa;">
+      <div class="intensity-indicator">
+        <div class="intensity-dot" id="int1"></div>
+        <div class="intensity-dot" id="int2"></div>
+        <div class="intensity-dot" id="int3"></div>
+      </div>
+      <div style="margin-top: 10px; color: #aaa; text-align: center;">
         Уровень: <strong id="intensityDisplay" style="color: #fd7e14;">1</strong>
       </div>
     </div>
@@ -137,7 +155,6 @@
   </div>
 
   <script>
-    // === НАСТРОЙКИ MQTT ===
     const MQTT_BROKER = 'wss://08e9e3a2d0a74f869ff81ec29af53f86.s1.eu.hivemq.cloud:8884/mqtt';
     const MQTT_USER = 'web_client';
     const MQTT_PASS = 'WebChair2026!';
@@ -171,9 +188,12 @@
             try {
               const data = JSON.parse(message.toString());
               updateUI(data);
+              
+              // Измеряем задержку
               if (lastCommandTime > 0) {
                 const latency = Date.now() - lastCommandTime;
                 document.getElementById('latencyDisplay').textContent = `Задержка: ${latency} мс`;
+                lastCommandTime = 0; // Сбрасываем
               }
             } catch (e) {
               console.error('Ошибка парсинга JSON:', e);
@@ -202,18 +222,38 @@
       }
       const command = { action: action, timestamp: Date.now() };
       client.publish(TOPIC_COMMANDS, JSON.stringify(command));
-      lastCommandTime = Date.now();
+      lastCommandTime = Date.now(); // Запоминаем время отправки
       document.getElementById('latencyDisplay').textContent = 'Задержка: отправка...';
     }
     
     function updateUI(data) {
+      // Обновляем статусы
       document.getElementById('chairStatus').textContent = data.chairOn ? 'Включено ✅' : 'Выключено ❌';
+      document.getElementById('chairStatus').className = 'value' + (data.chairOn ? ' active' : '');
+      
       document.getElementById('spineStatus').textContent = data.spineOn ? 'Вкл ✅' : 'Выкл';
+      document.getElementById('spineStatus').className = 'value' + (data.spineOn ? ' active' : '');
+      
       document.getElementById('seatStatus').textContent = data.seatOn ? 'Вкл ✅' : 'Выкл';
+      document.getElementById('seatStatus').className = 'value' + (data.seatOn ? ' active' : '');
+      
       document.getElementById('legsStatus').textContent = data.legsOn ? 'Вкл ✅' : 'Выкл';
+      document.getElementById('legsStatus').className = 'value' + (data.legsOn ? ' active' : '');
+      
       document.getElementById('modeDisplay').textContent = data.mode || 0;
       document.getElementById('intensityDisplay').textContent = data.intensity || 1;
       document.getElementById('powerBtnText').textContent = data.chairOn ? 'ВЫКЛЮЧИТЬ' : 'ВКЛЮЧИТЬ';
+      
+      // Обновляем индикаторы интенсивности
+      const intensity = data.intensity || 1;
+      for (let i = 1; i <= 3; i++) {
+        const dot = document.getElementById('int' + i);
+        if (i <= intensity) {
+          dot.classList.add('active');
+        } else {
+          dot.classList.remove('active');
+        }
+      }
     }
     
     function showError(msg) {
